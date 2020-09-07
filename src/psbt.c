@@ -2578,14 +2578,15 @@ int wally_sign_psbt(
             if ((ret = wally_scriptpubkey_p2sh_from_bytes(input->redeem_script, input->redeem_script_len, WALLY_SCRIPT_HASH160, sh, WALLY_SCRIPTPUBKEY_P2SH_LEN, &written)) != WALLY_OK) {
                 return ret;
             }
-            if (input->non_witness_utxo) {
-                if (input->non_witness_utxo->outputs[txin->index].script_len != WALLY_SCRIPTPUBKEY_P2SH_LEN ||
-                    memcmp(sh, input->non_witness_utxo->outputs[txin->index].script, WALLY_SCRIPTPUBKEY_P2SH_LEN) != 0) {
-                    return WALLY_EINVAL;
-                }
-            } else if (input->witness_utxo) {
+
+            if (input->witness_utxo) {
                 if (input->witness_utxo->script_len != WALLY_SCRIPTPUBKEY_P2SH_LEN ||
                     memcmp(sh, input->witness_utxo->script, WALLY_SCRIPTPUBKEY_P2SH_LEN) != 0) {
+                    return WALLY_EINVAL;
+                }
+            } else if (input->non_witness_utxo) {
+                if (input->non_witness_utxo->outputs[txin->index].script_len != WALLY_SCRIPTPUBKEY_P2SH_LEN ||
+                    memcmp(sh, input->non_witness_utxo->outputs[txin->index].script, WALLY_SCRIPTPUBKEY_P2SH_LEN) != 0) {
                     return WALLY_EINVAL;
                 }
             } else {
@@ -2594,31 +2595,18 @@ int wally_sign_psbt(
             scriptcode = input->redeem_script;
             scriptcode_len = input->redeem_script_len;
         } else {
-            if (input->non_witness_utxo) {
-                scriptcode = input->non_witness_utxo->outputs[txin->index].script;
-                scriptcode_len = input->non_witness_utxo->outputs[txin->index].script_len;
-            } else if (input->witness_utxo) {
+            if (input->witness_utxo) {
                 scriptcode = input->witness_utxo->script;
                 scriptcode_len = input->witness_utxo->script_len;
+            } else if (input->non_witness_utxo) {
+                scriptcode = input->non_witness_utxo->outputs[txin->index].script;
+                scriptcode_len = input->non_witness_utxo->outputs[txin->index].script_len;
             } else {
                 continue;
             }
         }
 
-        if (input->non_witness_utxo) {
-            unsigned char txid[SHA256_LEN];
-
-            if ((ret = get_txid(input->non_witness_utxo, txid, SHA256_LEN)) != WALLY_OK) {
-                return ret;
-            }
-            if (memcmp((char *)txid, (char *)txin->txhash, SHA256_LEN) != 0) {
-                return WALLY_EINVAL;
-            }
-
-            if ((ret = wally_tx_get_btc_signature_hash(psbt->tx, i, scriptcode, scriptcode_len, 0, sighash_type, 0, sighash, SHA256_LEN)) != WALLY_OK) {
-                return ret;
-            }
-        } else if (input->witness_utxo) {
+        if (input->witness_utxo) {
             size_t type;
             if ((ret = wally_scriptpubkey_get_type(scriptcode, scriptcode_len, &type)) != WALLY_OK) {
                 return ret;
@@ -2649,6 +2637,20 @@ int wally_sign_psbt(
             }
 
             if ((ret = wally_tx_get_btc_signature_hash(psbt->tx, i, scriptcode, scriptcode_len, input->witness_utxo->satoshi, sighash_type, WALLY_TX_FLAG_USE_WITNESS, sighash, SHA256_LEN)) != WALLY_OK) {
+                return ret;
+            }
+
+        } else if (input->non_witness_utxo) {
+            unsigned char txid[SHA256_LEN];
+
+            if ((ret = get_txid(input->non_witness_utxo, txid, SHA256_LEN)) != WALLY_OK) {
+                return ret;
+            }
+            if (memcmp((char *)txid, (char *)txin->txhash, SHA256_LEN) != 0) {
+                return WALLY_EINVAL;
+            }
+
+            if ((ret = wally_tx_get_btc_signature_hash(psbt->tx, i, scriptcode, scriptcode_len, 0, sighash_type, 0, sighash, SHA256_LEN)) != WALLY_OK) {
                 return ret;
             }
         }
